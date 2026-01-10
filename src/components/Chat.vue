@@ -1,313 +1,247 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useChatStore } from '../stores/chat'
 import ChatArea from './ChatArea.vue'
 import Sidebar from './Sidebar.vue'
 import { MessageCircle, Phone, Settings, Archive, Bookmark } from 'lucide-vue-next'
 
-// Mock data moved here
-const mockUsers = [
-  { id: "1", name: "Bankaii", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face", isOnline: true },
-  { id: "2", name: "Karen", avatar: "https://images.unsplash.com/photo-1494790108755-2616b96d113c?w=40&h=40&fit=crop&crop=face", isOnline: true },
-  { id: "3", name: "Elena", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=40&h=40&fit=crop&crop=face", isOnline: true },
-  { id: "4", name: "Aleck", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=40&h=40&fit=crop&crop=face", isOnline: true },
-  { id: "5", name: "Runy", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=40&h=40&fit=crop&crop=face", isOnline: true },
-]
+const chatStore = useChatStore()
 
-const mockConversations = [
-  {
-    id: "1",
-    userId: "1",
-    lastMessage: "I'm quite tired!",
-    timestamp: "12:38 AM",
-    unreadCount: 0,
-  },
-  {
-    id: "2", 
-    userId: "2",
-    lastMessage: "Nice Clifton yo Fredric",
-    timestamp: "12:38 AM",
-    unreadCount: 1,
-  },
-  {
-    id: "3",
-    userId: "3", 
-    lastMessage: "Yes",
-    timestamp: "8:32 AM",
-    unreadCount: 0,
-  },
-  {
-    id: "4",
-    userId: "4",
-    lastMessage: "Hey let's meet at the...",
-    timestamp: "Yesterday",
-    unreadCount: 0,
-  },
-  {
-    id: "5",
-    userId: "4",
-    lastMessage: "Morning is magical",
-    timestamp: "Yesterday", 
-    unreadCount: 0,
-  },
-  {
-    id: "6",
-    userId: "paper",
-    lastMessage: "2nd place is great lol",
-    timestamp: "Yesterday",
-    unreadCount: 1,
-  },
-  {
-    id: "7",
-    userId: "5",
-    lastMessage: "Hi Karen!",
-    timestamp: "Yesterday",
-    unreadCount: 0,
-  },
-]
-
-// Message data for each conversation
-import exampleImage from '../assets/3R6A0573.JPG'
-
-const mockMessages = {
-   "1": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Man, when you'll book a plan ticket?",
-      timestamp: "09:07 AM",
-      type: "text",
-    },
-    {
-      id: "2", 
-      senderId: "me",
-      content: "I'm quite tired",
-      timestamp: "09:26 AM",
-      type: "text",
-      status: "read" // Options: 'sent', 'delivered', 'read'
-    },
-    {
-      id: "3",
-      senderId: "me", 
-      content: "Hey, we go back in 10!",
-      timestamp: "09:26 AM",
-      type: "text",
-      status: "read"
-    },
-    {
-      id: "4",
-      senderId: "other",
-      content: "Ok!",
-      timestamp: "09:31 AM", 
-      type: "text",
-    },
-    {
-      id: "5",
-      senderId: "me",
-      content: "Sure, I've bought the tickets",
-      timestamp: "10:40 AM",
-      type: "text",
-      status: "delivered"
-    },
-    {
-      id: "6",
-      senderId: "me",
-      content: "",
-      timestamp: "10:40 AM",
-      type: "image",
-      imageUrl: exampleImage,
-      status: "sent"
-    },
-  ],
-  "2": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Hello from Karen!",
-      timestamp: "11:00 AM",
-      type: "text",
-    },
-    {
-      id: "2", 
-      senderId: "me",
-      content: "Hi Karen!",
-      timestamp: "11:05 AM",
-      type: "text",
-    },
-  ],
-  "3": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Hi from Elena!",
-      timestamp: "10:00 AM",
-      type: "text",
-    },
-  ],
-  "4": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Meeting time?",
-      timestamp: "09:00 AM",
-      type: "text",
-    },
-  ],
-  "5": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Good morning!",
-      timestamp: "07:00 AM",
-      type: "text",
-    },
-  ],
-  "6": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "We got 2nd place!",
-      timestamp: "06:00 PM",
-      type: "text",
-    },
-  ],
-  "7": [
-    {
-      id: "1",
-      senderId: "other",
-      content: "Tokyo is amazing!",
-      timestamp: "03:00 PM",
-      type: "text",
-    },
-     {
-      id: "2", 
-      senderId: "me",
-      content: "Hi Karen!",
-      timestamp: "11:05 AM",
-      type: "text",
-    },
-  ],
-}
-
-// Special users (like PAPER REX)
-const specialUsers = {
-  "paper": { 
-    id: "paper", 
-    name: "PAPER REX", 
-    avatar: "https://images.unsplash.com/photo-1614680376593-902f74cf0d41?w=40&h=40&fit=crop&crop=face", 
-    isOnline: false 
-  }
-}
+// Socket connection (you'll need to implement this based on your backend)
+import socket from '../services/socket' // This should be your Socket.IO instance
 
 const selectedConversation = ref(null)
 const isMobile = ref(false)
-const showChatArea = ref(false) // For mobile: controls if chat area is visible
+const showChatArea = ref(false)
 
-// Check screen size on mount and resize
+// Current user info (should come from auth store)
+const currentUser = ref({
+  uuid: 'user-uuid-from-auth', // This should come from your auth system
+  name: 'Current User',
+  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+})
+
+// Screen size handling
 const checkScreenSize = () => {
-  isMobile.value = window.innerWidth < 768 // 768px is typical md breakpoint
+  isMobile.value = window.innerWidth < 768
   if (isMobile.value && !selectedConversation.value) {
     showChatArea.value = false
   }
 }
 
-// On component mount
-import { onMounted, onUnmounted } from 'vue'
+// Socket event handlers
+const setupSocketListeners = () => {
+  // Message events
+  // socket.on('message.new', (payload) => {
+  //   chatStore.addMessages(payload.conversationId, [payload.message])
+    
+  //   // Update conversation last message
+  //   chatStore.updateConversation(payload.conversationId, {
+  //     lastMessage: payload.message.text || getMessagePreview(payload.message),
+  //     lastMessageAt: payload.message.createdAt
+  //   })
+  // })
+
+  socket.on('message.new', (payload) => {
+  const msg = payload.message
+
+  chatStore.addMessages(payload.conversationId, [{
+    id: msg.id,
+    conversationId: payload.conversationId,
+    senderUuid: msg.sender_uuid,
+    type: msg.message_type,
+    text: msg.text_content,
+    media: msg.media || null,
+    createdAt: msg.created_at,
+    status: 'sent'
+  }])
+})
+
+  
+  socket.on('message.ack', (payload) => {
+    chatStore.updateMessageStatus(payload.messageId, 'sent')
+  })
+  
+  socket.on('message.delivered', (payload) => {
+    chatStore.updateMessageStatus(payload.messageId, 'delivered')
+  })
+  
+  socket.on('message.read', (payload) => {
+    chatStore.updateMessageStatus(payload.messageId, 'read')
+  })
+  
+  // Typing indicators
+  socket.on('typing.start', (payload) => {
+    chatStore.addTypingUser(payload.conversationId, payload.userUuid)
+  })
+  
+  socket.on('typing.stop', (payload) => {
+    chatStore.removeTypingUser(payload.conversationId, payload.userUuid)
+  })
+  
+  // Presence
+  socket.on('presence.online', (payload) => {
+    chatStore.setOnlineUsers([...chatStore.onlineUsers, payload.userId])
+  })
+  
+  socket.on('presence.offline', (payload) => {
+    const newOnlineUsers = new Set(chatStore.onlineUsers)
+    newOnlineUsers.delete(payload.userId)
+    chatStore.setOnlineUsers([...newOnlineUsers])
+  })
+
+  socket.emit('conversation.join', {
+  conversationId: selectedConversation.value
+})
+
+  
+  // Initial sync
+  socket.on('sync.response', (payload) => {
+    chatStore.setConversations(payload.conversations)
+    
+    // Load messages for each conversation
+    Object.keys(payload.messages).forEach(conversationId => {
+      chatStore.addMessages(conversationId, payload.messages[conversationId])
+    })
+  })
+}
+
+const getMessagePreview = (message) => {
+  switch (message.type) {
+    case 'image': return '📷 Image'
+    case 'video': return '🎥 Video'
+    case 'audio': return '🎵 Audio'
+    case 'document': return '📄 Document'
+    default: return message.text || 'Message'
+  }
+}
+
+const handleSelectConversation = (id) => {
+  const previousValue = selectedConversation.value
+  
+  if (isMobile.value && id === previousValue) {
+    showChatArea.value = !showChatArea.value
+  } else {
+    selectedConversation.value = id
+    chatStore.activeConversationId = id
+    if (isMobile.value) {
+      showChatArea.value = true
+    }
+
+    // join the conversation 
+    socket.emit('conversation.join', {
+    conversationId: id
+  })
+    
+    // Mark messages as read when selecting conversation
+    if (id) {
+      socket.emit('conversation.read', { conversationId: id })
+    }
+  }
+}
+
+// const handleSelectConversation = (id) => {
+//   selectedConversation.value = id
+//   chatStore.activeConversationId = id
+
+//   socket.emit('conversation.join', {
+//     conversationId: id
+//   })
+// }
+
+
+const handleBackToSidebar = () => {
+  showChatArea.value = false
+}
+
+const handleSendMessage = (payload) => {
+  if (!selectedConversation.value) return
+  
+  // Send message intent to backend
+  // socket.emit('message.send', {
+  //   requestId: crypto.randomUUID(),
+  //   conversationId: selectedConversation.value,
+  //   payload: payload
+  // })
+
+  socket.emit('message.send', {
+  requestId: crypto.randomUUID(),
+  payload: {
+    conversationId: selectedConversation.value,
+    content: payload
+  }
+})
+
+  
+  // Clear input (handled in ChatArea)
+}
+
+// Typing indicator
+let typingTimeout = null
+// const handleTyping = () => {
+//   if (!selectedConversation.value) return
+  
+//   // Send typing start
+//   socket.emit('typing.start', { conversationId: selectedConversation.value })
+  
+//   // Clear previous timeout
+//   if (typingTimeout) clearTimeout(typingTimeout)
+  
+//   // Set timeout to send typing stop
+//   typingTimeout = setTimeout(() => {
+//     socket.emit('typing.stop', { conversationId: selectedConversation.value })
+//   }, 3000)
+// }
+
+const handleTyping = (payload) => {
+  if (!payload?.conversationId) return
+
+  socket.emit('typing.start', payload)
+}
+
+
 onMounted(() => {
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
+  
+  // Setup socket listeners
+  setupSocketListeners()
+  
+  // Request initial sync
+  socket.emit('sync.request')
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkScreenSize)
+  // Clean up socket listeners
+  socket.off('message.new')
+  socket.off('message.ack')
+  socket.off('message.delivered')
+  socket.off('message.read')
+  socket.off('typing.start')
+  socket.off('typing.stop')
+  socket.off('presence.online')
+  socket.off('presence.offline')
+  socket.off('sync.response')
 })
 
-// Watch for conversation changes on mobile - FIXED
-watch(selectedConversation, (newValue, oldValue) => {
-  if (isMobile.value && newValue && newValue !== oldValue) {
-    showChatArea.value = true
-  }
-})
-
-// Get the current conversation user
-const currentConversationUser = computed(() => {
-  const conversation = mockConversations.find(c => c.id === selectedConversation.value)
-  if (!conversation) return null
-  
-  // Check if it's a special user or regular user
-  if (conversation.userId in specialUsers) {
-    return specialUsers[conversation.userId]
-  }
-  
-  return mockUsers.find(user => user.id === conversation.userId) || mockUsers[0]
-})
-
-// Get messages for selected conversation
-const currentMessages = computed(() => {
-  return mockMessages[selectedConversation.value] || []
-})
-
-const handleSelectConversation = (id) => {
-  // Store previous value to compare
-  const previousValue = selectedConversation.value
-  
-  // If clicking the same conversation on mobile, toggle chat area
-  if (isMobile.value && id === previousValue) {
-    showChatArea.value = !showChatArea.value
-  } else {
-    // Different conversation or desktop
-    selectedConversation.value = id
-    if (isMobile.value) {
-      showChatArea.value = true
+onMounted(() => {
+  chatStore.setConversations([
+    {
+      id: 'REAL_CONVERSATION_UUID',
+      name: 'Test Chat',
+      lastMessage: '',
+      lastMessageAt: null,
+      unreadCount: 0
     }
-  }
-}
+  ])
 
-const handleBackToSidebar = () => {
-  // Don't clear selectedConversation, just hide chat area
-  showChatArea.value = false
-}
+  selectedConversation.value = 'REAL_CONVERSATION_UUID'
+  chatStore.activeConversationId = 'REAL_CONVERSATION_UUID'
 
-// Prepare conversation data for sidebar
-const conversationData = computed(() => {
-  return mockConversations.map(conversation => {
-    let user
-    if (conversation.userId in specialUsers) {
-      user = specialUsers[conversation.userId]
-    } else {
-      user = mockUsers.find(u => u.id === conversation.userId) || mockUsers[0]
-    }
-    
-    return {
-      id: conversation.id,
-      user: user,
-      lastMessage: conversation.lastMessage,
-      timestamp: conversation.timestamp,
-      unreadCount: conversation.unreadCount
-    }
-  })
+  setupSocketListeners()
 })
 
-const handleSendMessage = (message) => {
-  // Add the new message to the current conversation
-  if (mockMessages[selectedConversation.value]) {
-    mockMessages[selectedConversation.value].push(message)
-  }
-  
-  // Update the conversation's last message
-  const conversation = mockConversations.find(c => c.id === selectedConversation.value)
-  if (conversation) {
-    conversation.lastMessage = message.type === 'text' 
-      ? message.content 
-      : message.type === 'image' 
-        ? '📷 Image' 
-        : message.type === 'video'
-          ? '🎥 Video'
-          : message.type === 'audio'
-            ? '🎵 Audio'
-            : '📄 Document'
-    conversation.timestamp = message.timestamp
-  }
-}
 </script>
 
 <template>
@@ -321,7 +255,8 @@ const handleSendMessage = (message) => {
     >
       <Sidebar 
         :selected-conversation="selectedConversation"
-        :conversations="conversationData"
+        :conversations="chatStore.conversations"
+        :online-users="chatStore.onlineUsers"
         @select-conversation="handleSelectConversation"
       />
     </div>
@@ -333,25 +268,19 @@ const handleSendMessage = (message) => {
         isMobile ? (showChatArea ? 'w-full' : 'hidden') : 'flex-1'
       ]"
     >
-      <!-- <ChatArea 
+      <ChatArea 
         :conversation-id="selectedConversation"
-        :messages="currentMessages"
-        :current-user="currentConversationUser"
+        :messages="chatStore.activeMessages"
+        :current-user="currentUser"
         :is-mobile="isMobile"
+        :typing-users="chatStore.typingUsers[selectedConversation] || []"
         @back="handleBackToSidebar"
-      /> -->
-
-       <ChatArea 
-    :conversation-id="selectedConversation"
-    :messages="currentMessages"
-    :current-user="currentConversationUser"
-    :is-mobile="isMobile"
-    @back="handleBackToSidebar"
-    @send-message="handleSendMessage"
-  />
+        @send-message="handleSendMessage"
+        @typing="handleTyping"
+      />
     </div>
 
-    <!-- MOBILE BOTTOM NAVIGATION - ONLY SHOWN WHEN SIDEBAR IS VISIBLE -->
+    <!-- MOBILE BOTTOM NAVIGATION -->
     <div 
       v-if="isMobile && !showChatArea"
       class="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 px-4 justify-around items-center z-50"
