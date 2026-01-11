@@ -49,7 +49,7 @@ const formatTime = (timestamp) => {
 <template>
   <div class="w-full md:w-85 border-r border-border flex h-screen">
     <!-- Navigation Icons - Hidden on mobile -->
-    <div class="hidden md:flex w-18 flex-col items-center py-4 space-y-4 bg-amber-400">
+    <div class="hidden md:flex w-18 flex-col items-center py-4 space-y-4 bg-gray-50">
       <div class="avatar w-10 h-10 rounded-full overflow-hidden">
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face" alt="ME" class="w-full h-full object-cover" />
         <div class="w-full h-full bg-gray-200 flex items-center justify-center">

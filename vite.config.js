@@ -12,12 +12,34 @@ export default defineConfig({
     vueDevTools(),
     tailwindcss(),
   ],
+   server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000', // 🔥 backend port
+        changeOrigin: true,
+        secure: false
+      }
+    }
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
 })
+
+// export default defineConfig({
+//   plugins: [vue()],
+//   server: {
+//     proxy: {
+//       '/api': {
+//         target: 'http://localhost:4000', // 🔥 backend port
+//         changeOrigin: true,
+//         secure: false
+//       }
+//     }
+//   }
+// })
 
 
 

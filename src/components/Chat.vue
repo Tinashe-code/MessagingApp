@@ -4,22 +4,66 @@ import { useChatStore } from '../stores/chat'
 import ChatArea from './ChatArea.vue'
 import Sidebar from './Sidebar.vue'
 import { MessageCircle, Phone, Settings, Archive, Bookmark } from 'lucide-vue-next'
+import socketService from '@/services/socket'
 
 const chatStore = useChatStore()
 
 // Socket connection (you'll need to implement this based on your backend)
-import socket from '../services/socket' // This should be your Socket.IO instance
+// import socket from '../services/socket' // This should be your Socket.IO instance
 
 const selectedConversation = ref(null)
+const selectedConversationname = ref(null)
 const isMobile = ref(false)
 const showChatArea = ref(false)
 
-// Current user info (should come from auth store)
-const currentUser = ref({
-  uuid: 'user-uuid-from-auth', // This should come from your auth system
-  name: 'Current User',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+const USERS = {
+  1: {
+    uuid: '11111111-1111-1111-1111-111111111111',
+    name: 'Tendai',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+  },
+  2: {
+    uuid: '33333333-3333-3333-3333-333333333333',
+    name: 'Tinashe',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+  }
+}
+
+const currentUser = ref(null)
+
+const resolveCurrentUser = () => {
+  const params = new URLSearchParams(window.location.search)
+  const userParam = params.get('user')
+  console.log('Params for cusrrent user', params)
+  console.log('Userparam', userParam)
+
+  // Default → user 1 (Tendai)
+  currentUser.value = userParam === '2' ? USERS[2] : USERS[1]
+
+  socketService.emit('user.join', {
+  userUuid: currentUser.value.uuid
 })
+console.log('🔌 USER JOINED SOCKET AS:', currentUser.value.uuid)
+
+
+  console.log('🧑 CURRENT USER:', currentUser.value)
+}
+
+
+
+
+// Current user info (should come from auth store)
+// const currentUser = ref({
+//   uuid: '33333333-3333-3333-3333-333333333333', // This should come from your auth system
+//   name: 'Tinashe',
+//   avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+// })
+
+// const currentUser = ref({
+//   uuid: '11111111-1111-1111-1111-111111111111', // This should come from your auth system
+//   name: 'Tendai',
+//   avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=40&h=40&fit=crop&crop=face'
+// })
 
 // Screen size handling
 const checkScreenSize = () => {
@@ -34,7 +78,7 @@ const setupSocketListeners = () => {
   // Message events
   // socket.on('message.new', (payload) => {
   //   chatStore.addMessages(payload.conversationId, [payload.message])
-    
+
   //   // Update conversation last message
   //   chatStore.updateConversation(payload.conversationId, {
   //     lastMessage: payload.message.text || getMessagePreview(payload.message),
@@ -42,63 +86,107 @@ const setupSocketListeners = () => {
   //   })
   // })
 
-  socket.on('message.new', (payload) => {
-  const msg = payload.message
+  // socketService.on('message.new', (payload) => {
+  //   const msg = payload.message
 
-  chatStore.addMessages(payload.conversationId, [{
-    id: msg.id,
-    conversationId: payload.conversationId,
-    senderUuid: msg.sender_uuid,
-    type: msg.message_type,
-    text: msg.text_content,
-    media: msg.media || null,
-    createdAt: msg.created_at,
+  //   chatStore.addMessages(payload.conversationId, [{
+  //     id: msg.id,
+  //     conversationId: payload.conversationId,
+  //     senderUuid: msg.sender_uuid,
+  //     type: msg.message_type,
+  //     text: msg.text_content,
+  //     media: msg.media || null,
+  //     createdAt: msg.created_at,
+  //     status: 'sent'
+  //   }])
+  // })
+
+  socketService.on('message.new', ({ conversationId, message }) => {
+  console.log('📥 NEW MESSAGE RECEIVED:', message)
+
+  chatStore.addMessages(conversationId, [{
+    id: message.id,
+    conversation_id: conversationId,
+    sender_uuid: message.sender_uuid,
+    message_type: message.message_type,
+    text_content: message.text_content,
+    media: message.media || null,
+    created_at: message.created_at,
     status: 'sent'
   }])
 })
 
-  
-  socket.on('message.ack', (payload) => {
-    chatStore.updateMessageStatus(payload.messageId, 'sent')
+
+
+  // socket.on('message.ack', (payload) => {
+  //   chatStore.updateMessageStatus(payload.messageId, 'sent')
+  // })
+  // socketService.on('message.ack', ({ requestId, payload }) => {
+  //   console.log('✅ MESSAGE ACK:', requestId)
+
+  //   chatStore.updateMessageStatus(requestId, 'SENT')
+  // })
+
+//   socketService.on('message.ack', ({ requestId, message }) => {
+//   console.log('✅ MESSAGE ACK RECEIVED:', requestId)
+
+//   chatStore.replaceOptimisticMessage(requestId, {
+//     id: message.id,
+//     created_at: message.created_at,
+//     status: 'sent'
+//   })
+// })
+
+socketService.on('message.ack', ({ requestId, payload }) => {
+  console.log('✅ MESSAGE ACK:', requestId, payload)
+
+  chatStore.replaceOptimisticMessage(requestId, {
+    id: payload.messageId,
+    status: 'sent',
+    optimistic: false
   })
-  
-  socket.on('message.delivered', (payload) => {
+})
+
+
+
+
+  socketService.on('message.delivered', (payload) => {
     chatStore.updateMessageStatus(payload.messageId, 'delivered')
   })
-  
-  socket.on('message.read', (payload) => {
+
+  socketService.on('message.read', (payload) => {
     chatStore.updateMessageStatus(payload.messageId, 'read')
   })
-  
+
   // Typing indicators
-  socket.on('typing.start', (payload) => {
+  socketService.on('typing.start', (payload) => {
     chatStore.addTypingUser(payload.conversationId, payload.userUuid)
   })
-  
-  socket.on('typing.stop', (payload) => {
+
+  socketService.on('typing.stop', (payload) => {
     chatStore.removeTypingUser(payload.conversationId, payload.userUuid)
   })
-  
+
   // Presence
-  socket.on('presence.online', (payload) => {
+  socketService.on('presence.online', (payload) => {
     chatStore.setOnlineUsers([...chatStore.onlineUsers, payload.userId])
   })
-  
-  socket.on('presence.offline', (payload) => {
+
+  socketService.on('presence.offline', (payload) => {
     const newOnlineUsers = new Set(chatStore.onlineUsers)
     newOnlineUsers.delete(payload.userId)
     chatStore.setOnlineUsers([...newOnlineUsers])
   })
 
-  socket.emit('conversation.join', {
-  conversationId: selectedConversation.value
-})
+  socketService.emit('conversation.join', {
+    conversationId: selectedConversation.value
+  })
 
-  
+
   // Initial sync
-  socket.on('sync.response', (payload) => {
+  socketService.on('sync.response', (payload) => {
     chatStore.setConversations(payload.conversations)
-    
+
     // Load messages for each conversation
     Object.keys(payload.messages).forEach(conversationId => {
       chatStore.addMessages(conversationId, payload.messages[conversationId])
@@ -116,9 +204,54 @@ const getMessagePreview = (message) => {
   }
 }
 
+// async function openConversation(conversationId) {
+//   chatStore.activeConversationId = conversationId
+
+//   // 🔥 JOIN SOCKET ROOM
+//   socketService.emit('conversation.join', { conversationId })
+
+//   // 🔥 LOAD HISTORY
+//   const res = await fetch(
+//     `/api/conversations/${conversationId}/messages`
+//   )
+//   console.log('FETCH MESSAGES RESPONSE:', res)
+//   const data = await res.json()
+//   console.log('FETCHED MESSAGES DATA:', data)
+//   //   const text = await res.text()
+//   // console.log('RAW RESPONSE TEXT:', text)
+
+//   // chatStore.addMessages(conversationId, data)
+//   chatStore.addMessages(conversationId, data.messages)
+// }
+
+
+async function openConversation(conversationId) {
+  console.log('📂 OPEN CONVERSATION:', conversationId)
+
+  chatStore.activeConversationId = conversationId
+
+  // JOIN SOCKET ROOM
+  socketService.emit('conversation.join', {
+    conversationId
+  })
+
+  console.log('🔗 JOINED ROOM:', conversationId)
+
+  // LOAD HISTORY (ONCE)
+  const res = await fetch(`/api/conversations/${conversationId}/messages`)
+  const data = await res.json()
+
+  console.log('📜 HISTORY LOADED:', data.messages)
+
+  // chatStore.setMessages(conversationId, data.messages)
+  chatStore.addMessages(conversationId, data.messages)
+}
+
+
+
 const handleSelectConversation = (id) => {
   const previousValue = selectedConversation.value
-  
+
   if (isMobile.value && id === previousValue) {
     showChatArea.value = !showChatArea.value
   } else {
@@ -129,13 +262,16 @@ const handleSelectConversation = (id) => {
     }
 
     // join the conversation 
-    socket.emit('conversation.join', {
-    conversationId: id
-  })
-    
+    //   socket.emit('conversation.join', {
+    //   conversationId: id
+    // })
+    openConversation(id)
+
+
+
     // Mark messages as read when selecting conversation
     if (id) {
-      socket.emit('conversation.read', { conversationId: id })
+      socketService.emit('conversation.read', { conversationId: id })
     }
   }
 }
@@ -144,7 +280,7 @@ const handleSelectConversation = (id) => {
 //   selectedConversation.value = id
 //   chatStore.activeConversationId = id
 
-//   socket.emit('conversation.join', {
+//   socketService.emit('conversation.join', {
 //     conversationId: id
 //   })
 // }
@@ -154,39 +290,54 @@ const handleBackToSidebar = () => {
   showChatArea.value = false
 }
 
-const handleSendMessage = (payload) => {
+// const handleSendMessage = (payload) => {
+//   if (!selectedConversation.value) return
+
+//   // Send message intent to backend
+//   // socket.emit('message.send', {
+//   //   requestId: crypto.randomUUID(),
+//   //   conversationId: selectedConversation.value,
+//   //   payload: payload
+//   // })
+
+//   socketService.emit('message.send', {
+//     requestId: crypto.randomUUID(),
+//     payload: {
+//       conversationId: selectedConversation.value,
+//       content: payload
+//     }
+//   })
+
+
+//   // Clear input (handled in ChatArea)
+// }
+
+const handleSendMessage = ({ requestId, ...payload }) => {
   if (!selectedConversation.value) return
-  
-  // Send message intent to backend
-  // socket.emit('message.send', {
-  //   requestId: crypto.randomUUID(),
-  //   conversationId: selectedConversation.value,
-  //   payload: payload
-  // })
 
-  socket.emit('message.send', {
-  requestId: crypto.randomUUID(),
-  payload: {
-    conversationId: selectedConversation.value,
-    content: payload
-  }
-})
+  console.log('📡 EMIT SOCKET MESSAGE:', { requestId, payload })
 
-  
-  // Clear input (handled in ChatArea)
+  socketService.emit('message.send', {
+    requestId,
+    payload: {
+      conversationId: selectedConversation.value,
+      content: payload
+    }
+  })
 }
+
 
 // Typing indicator
 let typingTimeout = null
 // const handleTyping = () => {
 //   if (!selectedConversation.value) return
-  
+
 //   // Send typing start
 //   socket.emit('typing.start', { conversationId: selectedConversation.value })
-  
+
 //   // Clear previous timeout
 //   if (typingTimeout) clearTimeout(typingTimeout)
-  
+
 //   // Set timeout to send typing stop
 //   typingTimeout = setTimeout(() => {
 //     socket.emit('typing.stop', { conversationId: selectedConversation.value })
@@ -196,95 +347,132 @@ let typingTimeout = null
 const handleTyping = (payload) => {
   if (!payload?.conversationId) return
 
-  socket.emit('typing.start', payload)
+  socketService.emit('typing.start', payload)
 }
 
 
 onMounted(() => {
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
-  
+
   // Setup socket listeners
   setupSocketListeners()
-  
+
   // Request initial sync
-  socket.emit('sync.request')
+  socketService.emit('sync.request')
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkScreenSize)
   // Clean up socket listeners
-  socket.off('message.new')
-  socket.off('message.ack')
-  socket.off('message.delivered')
-  socket.off('message.read')
-  socket.off('typing.start')
-  socket.off('typing.stop')
-  socket.off('presence.online')
-  socket.off('presence.offline')
-  socket.off('sync.response')
+  socketService.off('message.new')
+  socketService.off('message.ack')
+  socketService.off('message.delivered')
+  socketService.off('message.read')
+  socketService.off('typing.start')
+  socketService.off('typing.stop')
+  socketService.off('presence.online')
+  socketService.off('presence.offline')
+  socketService.off('sync.response')
 })
 
+// onMounted(() => {
+//   chatStore.setConversations([
+//     {
+//       id: 'c1d2f3a4-5678-4abc-9def-111122223333',
+//       name: 'Test Chat',
+//       lastMessage: '',
+//       lastMessageAt: null,
+//       unreadCount: 0
+//     }
+//   ])
+
+//   selectedConversation.value = 'c1d2f3a4-5678-4abc-9def-111122223333'
+//   chatStore.activeConversationId = 'c1d2f3a4-5678-4abc-9def-111122223333'
+
+//   setupSocketListeners()
+// })
+
+const conversationId = 'c1d2f3a4-5678-4abc-9def-111122223333'
+
+const participants = [
+  USERS[1],
+  USERS[2]
+]
+
+// const otherUser = participants.find(
+//   u => u.uuid !== currentUser.value.uuid
+// )
+
+// chatStore.setConversations([
+//   {
+//     id: conversationId,
+//     name: otherUser.name,
+//     participants,
+//     lastMessage: '',
+//     lastMessageAt: null,
+//     unreadCount: 0
+//   }
+// ])
+
+// selectedConversation.value = conversationId
+// chatStore.activeConversationId = conversationId
+
 onMounted(() => {
+  resolveCurrentUser()
+  
+  const otherUser = participants.find(
+    u => u.uuid !== currentUser.value.uuid
+  )
+
   chatStore.setConversations([
     {
-      id: 'REAL_CONVERSATION_UUID',
-      name: 'Test Chat',
+      id: conversationId,
+      name: otherUser.name,
+      participants,
       lastMessage: '',
       lastMessageAt: null,
       unreadCount: 0
     }
   ])
 
-  selectedConversation.value = 'REAL_CONVERSATION_UUID'
-  chatStore.activeConversationId = 'REAL_CONVERSATION_UUID'
+  selectedConversation.value = conversationId
+  selectedConversationname.value = otherUser.name
+  chatStore.activeConversationId = conversationId
 
-  setupSocketListeners()
+  // setupSocketListeners()
 })
+
+
+
 
 </script>
 
 <template>
   <div class="h-screen flex bg-background">
     <!-- Sidebar -->
-    <div 
-      :class="[
-        'transition-all duration-300 ease-in-out',
-        isMobile ? (showChatArea ? 'hidden' : 'w-full') : 'w-85'
-      ]"
-    >
-      <Sidebar 
-        :selected-conversation="selectedConversation"
-        :conversations="chatStore.conversations"
-        :online-users="chatStore.onlineUsers"
-        @select-conversation="handleSelectConversation"
-      />
+    <div :class="[
+      'transition-all duration-300 ease-in-out',
+      isMobile ? (showChatArea ? 'hidden' : 'w-full') : 'w-85'
+    ]">
+      <Sidebar :selected-conversation="selectedConversation" :conversations="chatStore.conversations"
+        :online-users="chatStore.onlineUsers" @select-conversation="handleSelectConversation" />
     </div>
-    
+    <!-- :chatPartner="selectedConversationname" -->
     <!-- Chat Area -->
-    <div 
-      :class="[
-        'transition-all duration-300 ease-in-out',
-        isMobile ? (showChatArea ? 'w-full' : 'hidden') : 'flex-1'
-      ]"
-    >
-      <ChatArea 
-        :conversation-id="selectedConversation"
-        :messages="chatStore.activeMessages"
-        :current-user="currentUser"
-        :is-mobile="isMobile"
-        :typing-users="chatStore.typingUsers[selectedConversation] || []"
-        @back="handleBackToSidebar"
-        @send-message="handleSendMessage"
-        @typing="handleTyping"
-      />
+    <div :class="[
+      'transition-all duration-300 ease-in-out',
+      isMobile ? (showChatArea ? 'w-full' : 'hidden') : 'flex-1'
+    ]">
+      <ChatArea :conversation-id="selectedConversation" :chatPartner="chatStore.conversations.find(c => c.id === selectedConversation)?.participants
+        ?.find(u => u.uuid !== currentUser.uuid)" :messages="chatStore.activeMessages" :current-user="currentUser"
+        :is-mobile="isMobile" :typing-users="chatStore.typingUsers[selectedConversation] || []"
+        @back="handleBackToSidebar" @send-message="handleSendMessage" @typing="handleTyping" />
     </div>
 
     <!-- MOBILE BOTTOM NAVIGATION -->
-    <div 
-      v-if="isMobile && !showChatArea"
-      class="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 px-4 justify-around items-center z-50"
-    >
+    <div v-if="isMobile && !showChatArea"
+      class="flex md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-2 px-4 justify-around items-center z-50">
       <button class="btn-mobile-icon flex flex-col items-center p-2 rounded-lg active:bg-gray-100">
         <MessageCircle class="w-6 h-6 mb-1" />
         <span class="text-xs">Chats</span>

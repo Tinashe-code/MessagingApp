@@ -1,11 +1,16 @@
 <script setup>
 import { Phone, Video, MoreVertical, Paperclip, Send, Smile, ChevronLeft, Check, CheckCheck, X, Play, FileText, File, Music } from 'lucide-vue-next'
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useChatStore } from '@/stores/chat'
+import socketService from '@/services/socket'
+import { v4 as uuidv4 } from 'uuid'
 
+const chatStore = useChatStore()
 const emit = defineEmits(['back', 'send-message', 'typing'])
 
 const props = defineProps({
   conversationId: String,
+  chatPartner: Object,
   messages: Array,
   currentUser: Object,
   isMobile: Boolean,
@@ -55,28 +60,123 @@ const handleKeyPress = (event) => {
   }
 }
 
+
+
+// const handleSendMessage = () => {
+//   if (isSendDisabled.value) return
+  
+//   // Handle text message
+//   const tempId = uuidv4()
+//   const now = new Date().toISOString()
+
+//   if (newMessage.value.trim() !== '') {
+//      chatStore.addOptimisticMessage(chatStore.activeConversationId, {
+//     id: tempId,
+//     conversation_id: chatStore.activeConversationId,
+//     sender_uuid: props.currentUser.uuid, // optional
+//     text_content: newMessage.value.trim(),
+//     created_at: now,
+//     message_type: "text",
+//     status: 'SENDING',
+//     tenant_id: "22222222-2222-2222-2222-222222222222",
+//     optimistic: true
+//   })
+
+//     emit('send-message', {
+//       type: 'text',
+//       text: newMessage.value.trim()
+//     })
+//     newMessage.value = ''
+//   }
+  
+//   // Handle file attachments
+//   if (selectedFiles.value.length > 0) {
+//     // For each file, you'll need to:
+//     // 1. Get upload URL from backend
+//     // 2. Upload to S3
+//     // 3. Send message with file metadata
+    
+//     selectedFiles.value.forEach(async (file) => {
+//       try {
+//         // Request upload URL from backend
+//         const uploadResponse = await fetch('/api/media/upload-url', {
+//           method: 'POST',
+//           headers: { 'Content-Type': 'application/json' },
+//           body: JSON.stringify({
+//             fileName: file.name,
+//             fileType: file.type,
+//             fileSize: file.size
+//           })
+//         })
+        
+//         const { uploadUrl, fileUrl } = await uploadResponse.json()
+        
+//         // Upload to S3
+//         await fetch(uploadUrl, {
+//           method: 'PUT',
+//           body: file,
+//           headers: {
+//             'Content-Type': file.type
+//           }
+//         })
+        
+//         // Send message with file metadata
+//         emit('send-message', {
+//           type: getFileType(file),
+//           media: {
+//             fileUrl: fileUrl,
+//             fileName: file.name,
+//             mimeType: file.type,
+//             fileSize: file.size
+//           }
+//         })
+//       } catch (error) {
+//         console.error('File upload failed:', error)
+//       }
+//     })
+    
+//     selectedFiles.value = []
+//   }
+  
+//   showAttachmentOptions.value = false
+// }
+
+
 const handleSendMessage = () => {
   if (isSendDisabled.value) return
-  
-  // Handle text message
+
+  const requestId = uuidv4()
+  const now = new Date().toISOString()
+
+  console.log('📤 HANDLE SEND MESSAGE', { requestId })
+
+  // ───────────────── TEXT MESSAGE ─────────────────
   if (newMessage.value.trim() !== '') {
+    chatStore.addOptimisticMessage(chatStore.activeConversationId, {
+      id: requestId, // 🔥 IMPORTANT: SAME AS requestId
+      conversation_id: chatStore.activeConversationId,
+      sender_uuid: props.currentUser.uuid,
+      text_content: newMessage.value.trim(),
+      created_at: now,
+      message_type: 'text',
+      status: 'SENDING',
+      tenant_id: '22222222-2222-2222-2222-222222222222',
+      optimistic: true
+    })
+
     emit('send-message', {
+      requestId, // 🔥 SEND IT UP
       type: 'text',
       text: newMessage.value.trim()
     })
+
     newMessage.value = ''
   }
-  
-  // Handle file attachments
+
+  // ───────────────── FILE ATTACHMENTS ─────────────────
   if (selectedFiles.value.length > 0) {
-    // For each file, you'll need to:
-    // 1. Get upload URL from backend
-    // 2. Upload to S3
-    // 3. Send message with file metadata
-    
     selectedFiles.value.forEach(async (file) => {
       try {
-        // Request upload URL from backend
         const uploadResponse = await fetch('/api/media/upload-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,38 +186,38 @@ const handleSendMessage = () => {
             fileSize: file.size
           })
         })
-        
+
         const { uploadUrl, fileUrl } = await uploadResponse.json()
-        
-        // Upload to S3
+
         await fetch(uploadUrl, {
           method: 'PUT',
           body: file,
-          headers: {
-            'Content-Type': file.type
-          }
+          headers: { 'Content-Type': file.type }
         })
-        
-        // Send message with file metadata
+
         emit('send-message', {
+          requestId, // 🔥 SAME requestId
           type: getFileType(file),
           media: {
-            fileUrl: fileUrl,
+            fileUrl,
             fileName: file.name,
             mimeType: file.type,
             fileSize: file.size
           }
         })
       } catch (error) {
-        console.error('File upload failed:', error)
+        console.error('❌ File upload failed:', error)
       }
     })
-    
+
     selectedFiles.value = []
   }
-  
+
   showAttachmentOptions.value = false
 }
+
+
+
 
 // File handling helpers
 const getFileType = (file) => {
@@ -182,13 +282,16 @@ const formatMessageTime = (timestamp) => {
 
 // Check if message is from current user
 const isMyMessage = (message) => {
-  return message.senderUuid === props.currentUser?.uuid
+  // console.log('CURRENT USER:', props.currentUser)
+  return message.sender_uuid === props.currentUser?.uuid
 }
 
 // Get message content for display
 const getMessageContent = (message) => {
-  if (message.type === 'text') {
-    return message.text || ''
+  // console.log('GETTING MESSAGE CONTENT FOR:', message)
+  if (message.message_type === 'text') {
+    // console.log('MESSAGE TEXT:')
+    return message.text_content || ''
   } else if (message.media) {
     // For media messages, show a preview
     switch (message.type) {
@@ -222,7 +325,8 @@ const getMessageContent = (message) => {
           </div>
         </div>
         <div>
-          <h3 class="font-semibold">{{ currentUser?.name || 'User' }}</h3>
+          <!-- <h3 class="font-semibold">{{ currentUser?.name || 'User' }}</h3> -->
+          <h3 class="font-semibold">{{ chatPartner?.name || 'User' }}</h3>
           <!-- Typing indicator -->
           <p v-if="typingUsers && typingUsers.length > 0" class="text-sm text-green-600">
             typing...
@@ -265,7 +369,7 @@ const getMessageContent = (message) => {
             isMyMessage(message) ? 'order-1' : ''
           ]">
             <!-- Text Message -->
-            <div v-if="message.type === 'text'" :class="[
+            <div v-if="message.message_type === 'text'" :class="[
               'px-4 py-2 rounded-2xl relative min-w-20',
               isMyMessage(message)
                 ? 'bg-blue-500 text-white rounded-br-md'
@@ -278,7 +382,7 @@ const getMessageContent = (message) => {
                 'absolute bottom-1 right-2 flex items-center',
                 isMyMessage(message) ? 'text-white/70' : 'text-gray-600'
               ]">
-                <span class="text-[10px] mr-1">{{ formatMessageTime(message.createdAt) }}</span>
+                <span class="text-[10px] mr-1">{{ formatMessageTime(message.created_at) }}</span>
                 
                 <!-- Status indicator for my messages -->
                 <div v-if="isMyMessage(message)">
@@ -416,3 +520,36 @@ const getMessageContent = (message) => {
   flex-shrink: 0;
 }
 </style>
+
+
+
+<!-- async function SendMessage(text) {
+  if (!chatStore.activeConversationId) return
+
+  const tempId = uuidv4()
+  const now = new Date().toISOString()
+
+  // 🔥 1. OPTIMISTIC MESSAGE
+  chatStore.addOptimisticMessage(chatStore.activeConversationId, {
+    id: tempId,
+    conversation_id: chatStore.activeConversationId,
+    sender_id: props.currentUser, // optional
+    text_content: newMessage.value.trim(),
+    createdAt: now,
+    status: 'SENDING',
+    optimistic: true
+  })
+  newMessage.value = ''
+
+  // 🔥 2. SEND TO SOCKET
+  socketService.emit('message.send', {
+    requestId: tempId,
+    payload: {
+      conversationId: chatStore.activeConversationId,
+      content: {
+        type: 'text',
+        text
+      }
+    }
+  })
+} -->
