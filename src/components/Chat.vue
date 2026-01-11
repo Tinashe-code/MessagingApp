@@ -4,7 +4,7 @@ import { useChatStore } from '../stores/chat'
 import ChatArea from './ChatArea.vue'
 import Sidebar from './Sidebar.vue'
 import { MessageCircle, Phone, Settings, Archive, Bookmark } from 'lucide-vue-next'
-import socketService from '@/services/socket'
+import SocketService from '@/services/socket'
 
 const chatStore = useChatStore()
 
@@ -40,7 +40,7 @@ const resolveCurrentUser = () => {
   // Default → user 1 (Tendai)
   currentUser.value = userParam === '2' ? USERS[2] : USERS[1]
 
-  socketService.emit('user.join', {
+  SocketService.emit('user.join', {
   userUuid: currentUser.value.uuid
 })
 console.log('🔌 USER JOINED SOCKET AS:', currentUser.value.uuid)
@@ -73,6 +73,44 @@ const checkScreenSize = () => {
   }
 }
 
+onMounted(() => {
+  checkScreenSize()
+  window.addEventListener('resize', checkScreenSize)
+
+  resolveCurrentUser()
+
+  // 🔌 CONNECT SOCKET FIRST
+  SocketService.connect()
+
+  // ⏳ WAIT FOR CONNECTION
+  SocketService.on('connect', () => {
+    console.log('✅ SOCKET READY — registering listeners')
+
+    setupSocketListeners()
+
+    SocketService.emit('sync.request')
+  })
+
+  const otherUser = participants.find(
+    u => u.uuid !== currentUser.value.uuid
+  )
+
+  chatStore.setConversations([
+    {
+      id: conversationId,
+      name: otherUser.name,
+      participants,
+      lastMessage: '',
+      lastMessageAt: null,
+      unreadCount: 0
+    }
+  ])
+
+  selectedConversation.value = conversationId
+  selectedConversationname.value = otherUser.name
+  chatStore.activeConversationId = conversationId
+})
+
 // Socket event handlers
 const setupSocketListeners = () => {
   // Message events
@@ -101,7 +139,29 @@ const setupSocketListeners = () => {
   //   }])
   // })
 
-  socketService.on('message.new', ({ conversationId, message }) => {
+//   SocketService.on('message.new', ({ conversationId, message }) => {
+//   console.log('📥 NEW MESSAGE RECEIVED:', message)
+
+//   chatStore.addMessages(conversationId, [{
+//     id: message.id,
+//     conversation_id: conversationId,
+//     sender_uuid: message.sender_uuid,
+//     message_type: message.message_type,
+//     text_content: message.text_content,
+//     media: message.media || null,
+//     created_at: message.created_at,
+//     status: 'sent'
+//   }])
+// })
+
+
+SocketService.on('message.new', ({ conversationId, message }) => {
+  // 🚫 Ignore my own messages
+  if (message.sender_uuid === currentUser.value.uuid) {
+    console.log('↩️ Ignoring self message')
+    return
+  }
+
   console.log('📥 NEW MESSAGE RECEIVED:', message)
 
   chatStore.addMessages(conversationId, [{
@@ -115,6 +175,8 @@ const setupSocketListeners = () => {
     status: 'sent'
   }])
 })
+
+
 
 
 
@@ -137,7 +199,7 @@ const setupSocketListeners = () => {
 //   })
 // })
 
-socketService.on('message.ack', ({ requestId, payload }) => {
+SocketService.on('message.ack', ({ requestId, payload }) => {
   console.log('✅ MESSAGE ACK:', requestId, payload)
 
   chatStore.replaceOptimisticMessage(requestId, {
@@ -150,41 +212,43 @@ socketService.on('message.ack', ({ requestId, payload }) => {
 
 
 
-  socketService.on('message.delivered', (payload) => {
+
+
+  SocketService.on('message.delivered', (payload) => {
     chatStore.updateMessageStatus(payload.messageId, 'delivered')
   })
 
-  socketService.on('message.read', (payload) => {
+  SocketService.on('message.read', (payload) => {
     chatStore.updateMessageStatus(payload.messageId, 'read')
   })
 
   // Typing indicators
-  socketService.on('typing.start', (payload) => {
+  SocketService.on('typing.start', (payload) => {
     chatStore.addTypingUser(payload.conversationId, payload.userUuid)
   })
 
-  socketService.on('typing.stop', (payload) => {
+  SocketService.on('typing.stop', (payload) => {
     chatStore.removeTypingUser(payload.conversationId, payload.userUuid)
   })
 
   // Presence
-  socketService.on('presence.online', (payload) => {
+  SocketService.on('presence.online', (payload) => {
     chatStore.setOnlineUsers([...chatStore.onlineUsers, payload.userId])
   })
 
-  socketService.on('presence.offline', (payload) => {
+  SocketService.on('presence.offline', (payload) => {
     const newOnlineUsers = new Set(chatStore.onlineUsers)
     newOnlineUsers.delete(payload.userId)
     chatStore.setOnlineUsers([...newOnlineUsers])
   })
 
-  socketService.emit('conversation.join', {
+  SocketService.emit('conversation.join', {
     conversationId: selectedConversation.value
   })
 
 
   // Initial sync
-  socketService.on('sync.response', (payload) => {
+  SocketService.on('sync.response', (payload) => {
     chatStore.setConversations(payload.conversations)
 
     // Load messages for each conversation
@@ -231,7 +295,7 @@ async function openConversation(conversationId) {
   chatStore.activeConversationId = conversationId
 
   // JOIN SOCKET ROOM
-  socketService.emit('conversation.join', {
+  SocketService.emit('conversation.join', {
     conversationId
   })
 
@@ -271,7 +335,7 @@ const handleSelectConversation = (id) => {
 
     // Mark messages as read when selecting conversation
     if (id) {
-      socketService.emit('conversation.read', { conversationId: id })
+      SocketService.emit('conversation.read', { conversationId: id })
     }
   }
 }
@@ -317,7 +381,7 @@ const handleSendMessage = ({ requestId, ...payload }) => {
 
   console.log('📡 EMIT SOCKET MESSAGE:', { requestId, payload })
 
-  socketService.emit('message.send', {
+  SocketService.emit('message.send', {
     requestId,
     payload: {
       conversationId: selectedConversation.value,
@@ -347,33 +411,33 @@ let typingTimeout = null
 const handleTyping = (payload) => {
   if (!payload?.conversationId) return
 
-  socketService.emit('typing.start', payload)
+  SocketService.emit('typing.start', payload)
 }
 
 
-onMounted(() => {
-  checkScreenSize()
-  window.addEventListener('resize', checkScreenSize)
+// onMounted(() => {
+//   checkScreenSize()
+//   window.addEventListener('resize', checkScreenSize)
 
-  // Setup socket listeners
-  setupSocketListeners()
+//   // Setup socket listeners
+//   setupSocketListeners()
 
-  // Request initial sync
-  socketService.emit('sync.request')
-})
+//   // Request initial sync
+//   SocketService.emit('sync.request')
+// })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkScreenSize)
   // Clean up socket listeners
-  socketService.off('message.new')
-  socketService.off('message.ack')
-  socketService.off('message.delivered')
-  socketService.off('message.read')
-  socketService.off('typing.start')
-  socketService.off('typing.stop')
-  socketService.off('presence.online')
-  socketService.off('presence.offline')
-  socketService.off('sync.response')
+  SocketService.off('message.new')
+  SocketService.off('message.ack')
+  SocketService.off('message.delivered')
+  SocketService.off('message.read')
+  SocketService.off('typing.start')
+  SocketService.off('typing.stop')
+  SocketService.off('presence.online')
+  SocketService.off('presence.offline')
+  SocketService.off('sync.response')
 })
 
 // onMounted(() => {
@@ -418,30 +482,33 @@ const participants = [
 // selectedConversation.value = conversationId
 // chatStore.activeConversationId = conversationId
 
-onMounted(() => {
-  resolveCurrentUser()
+// onMounted(() => {
+//   resolveCurrentUser()
   
-  const otherUser = participants.find(
-    u => u.uuid !== currentUser.value.uuid
-  )
+//   const otherUser = participants.find(
+//     u => u.uuid !== currentUser.value.uuid
+//   )
 
-  chatStore.setConversations([
-    {
-      id: conversationId,
-      name: otherUser.name,
-      participants,
-      lastMessage: '',
-      lastMessageAt: null,
-      unreadCount: 0
-    }
-  ])
+//   chatStore.setConversations([
+//     {
+//       id: conversationId,
+//       name: otherUser.name,
+//       participants,
+//       lastMessage: '',
+//       lastMessageAt: null,
+//       unreadCount: 0
+//     }
+//   ])
 
-  selectedConversation.value = conversationId
-  selectedConversationname.value = otherUser.name
-  chatStore.activeConversationId = conversationId
+//   selectedConversation.value = conversationId
+//   selectedConversationname.value = otherUser.name
+//   chatStore.activeConversationId = conversationId
 
-  // setupSocketListeners()
-})
+//   // setupSocketListeners()
+// })
+
+
+
 
 
 
