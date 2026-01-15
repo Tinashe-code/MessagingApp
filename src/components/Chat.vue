@@ -5,6 +5,8 @@ import ChatArea from './ChatArea.vue'
 import Sidebar from './Sidebar.vue'
 import { MessageCircle, Phone, Settings, Archive, Bookmark } from 'lucide-vue-next'
 import SocketService from '@/services/socket'
+import { fetchUserConversations } from '@/services/chat.api'
+
 
 const chatStore = useChatStore()
 
@@ -31,6 +33,7 @@ const USERS = {
 
 const currentUser = ref(null)
 
+
 const resolveCurrentUser = () => {
   const params = new URLSearchParams(window.location.search)
   const userParam = params.get('user')
@@ -49,6 +52,12 @@ console.log('🔌 USER JOINED SOCKET AS:', currentUser.value.uuid)
   console.log('🧑 CURRENT USER:', currentUser.value)
 }
 
+const conversationId = 'c1d2f3a4-5678-4abc-9def-111122223333'
+
+const participants = [
+  USERS[1],
+  USERS[2]
+]
 
 
 
@@ -73,7 +82,7 @@ const checkScreenSize = () => {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   checkScreenSize()
   window.addEventListener('resize', checkScreenSize)
 
@@ -95,21 +104,46 @@ onMounted(() => {
     u => u.uuid !== currentUser.value.uuid
   )
 
-  chatStore.setConversations([
-    {
-      id: conversationId,
-      name: otherUser.name,
-      participants,
-      lastMessage: '',
-      lastMessageAt: null,
-      unreadCount: 0
-    }
-  ])
+  // chatStore.setConversations([
+  //   {
+  //     id: conversationId,
+  //     name: otherUser.name,
+  //     participants,
+  //     lastMessage: '',
+  //     lastMessageAt: null,
+  //     unreadCount: 0
+  //   }
+  // ])
+  const conversations = await fetchUserConversations()
+  console.log('Fetched conversations:', conversations)
+  chatStore.setConversations(conversations)
+  
+
+  // Auto-select first conversation
+  if (chatStore.conversations.length) {
+    openConversation(chatStore.conversations[0].id)
+  }
 
   selectedConversation.value = conversationId
   selectedConversationname.value = otherUser.name
   chatStore.activeConversationId = conversationId
 })
+
+
+// onMounted(async () => {
+//   resolveCurrentUser()
+
+//   console.log('📥 Loading conversations...')
+//   const res = await fetch('/api/conversations')
+//   const conversations = await res.json()
+
+//   chatStore.setConversations(conversations)
+
+//   // Auto-select first conversation
+//   if (conversations.length) {
+//     openConversation(conversations[0].id)
+//   }
+// })
 
 // Socket event handlers
 const setupSocketListeners = () => {
@@ -174,6 +208,15 @@ SocketService.on('message.new', ({ conversationId, message }) => {
     created_at: message.created_at,
     status: 'sent'
   }])
+
+  console.log('➡️ Applying last message update to conversation sidebar')
+  console.log('Conversation ID:', conversationId)
+  console.log('Message:', message)
+  chatStore.applyLastMessageUpdate(
+  conversationId,
+  message
+)
+
 })
 
 
@@ -289,27 +332,52 @@ const getMessagePreview = (message) => {
 // }
 
 
-async function openConversation(conversationId) {
-  console.log('📂 OPEN CONVERSATION:', conversationId)
+// async function openConversation(conversationId) {
+//   console.log('📂 OPEN CONVERSATION:', conversationId)
 
+//   chatStore.activeConversationId = conversationId
+
+//   // JOIN SOCKET ROOM
+//   SocketService.emit('conversation.join', {
+//     conversationId
+//   })
+
+//   console.log('🔗 JOINED ROOM:', conversationId)
+
+//   // LOAD HISTORY (ONCE)
+//   const res = await fetch(`/api/conversations/${conversationId}/messages`)
+//   const data = await res.json()
+
+//   console.log('📜 HISTORY LOADED:', data.messages)
+
+//   // chatStore.setMessages(conversationId, data.messages)
+//   chatStore.addMessages(conversationId, data.messages)
+// }
+
+
+// REMEMBER TO UNCOMMENT THE CODE
+async function openConversation(conversationId) {
   chatStore.activeConversationId = conversationId
 
-  // JOIN SOCKET ROOM
-  SocketService.emit('conversation.join', {
-    conversationId
-  })
+  SocketService.emit('conversation.join', { conversationId })
 
-  console.log('🔗 JOINED ROOM:', conversationId)
+  console.log('📜 Loading last 5 days of messages...')
+  fetch(`/api/conversations/${conversationId}/messages`)
+    .then(res => res.json())
+    .then(({ messages }) => {
+      chatStore.addMessages(conversationId, messages)
 
-  // LOAD HISTORY (ONCE)
-  const res = await fetch(`/api/conversations/${conversationId}/messages`)
-  const data = await res.json()
-
-  console.log('📜 HISTORY LOADED:', data.messages)
-
-  // chatStore.setMessages(conversationId, data.messages)
-  chatStore.addMessages(conversationId, data.messages)
+      // Update sidebar preview using last message
+      const last = messages[messages.length - 1]
+      // if (last) {
+      //   chatStore.updateConversationLastMessage(conversationId, last)
+      // }
+    })
+    .catch(err => {
+      console.error('❌ Failed to load messages', err)
+    })
 }
+
 
 
 
@@ -457,12 +525,7 @@ onUnmounted(() => {
 //   setupSocketListeners()
 // })
 
-const conversationId = 'c1d2f3a4-5678-4abc-9def-111122223333'
 
-const participants = [
-  USERS[1],
-  USERS[2]
-]
 
 // const otherUser = participants.find(
 //   u => u.uuid !== currentUser.value.uuid
@@ -511,8 +574,6 @@ const participants = [
 
 
 
-
-
 </script>
 
 <template>
@@ -520,10 +581,10 @@ const participants = [
     <!-- Sidebar -->
     <div :class="[
       'transition-all duration-300 ease-in-out',
-      isMobile ? (showChatArea ? 'hidden' : 'w-full') : 'w-85'
+      isMobile ? (showChatArea ? 'hidden' : 'w-full') : 'w-105'
     ]">
       <Sidebar :selected-conversation="selectedConversation" :conversations="chatStore.conversations"
-        :online-users="chatStore.onlineUsers" @select-conversation="handleSelectConversation" />
+        :online-users="chatStore.onlineUsers" :currentUserId="currentUser" @select-conversation="handleSelectConversation" />
     </div>
     <!-- :chatPartner="selectedConversationname" -->
     <!-- Chat Area -->

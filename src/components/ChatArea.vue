@@ -164,6 +164,8 @@ const handleSendMessage = () => {
       optimistic: true
     })
 
+  
+
     emit('send-message', {
       requestId, // 🔥 SEND IT UP
       type: 'text',

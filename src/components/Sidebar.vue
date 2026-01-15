@@ -7,7 +7,8 @@ const props = defineProps({
   conversations: Array,
   // onlineUsers: Set,
   onlineUsers: Array,
-  onSelectConversation: Function
+  onSelectConversation: Function,
+  currentUserId: String
 })
 
 const emit = defineEmits(['select-conversation'])
@@ -44,6 +45,35 @@ const formatTime = (timestamp) => {
   // Otherwise show date
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
+
+
+// Helper to get other participant's name
+const getOtherParticipantName = computed(() => (conversation) => {
+  if (!conversation?.participants || !props.currentUserId) {
+    return conversation.name || 'Unknown User'
+  }
+  
+  // Find the participant who is NOT the current user
+  const otherParticipant = conversation.participants.find(
+    participant => participant.uuid !== props.currentUserId
+  )
+  
+  return otherParticipant?.user_name || conversation.name || 'Unknown User'
+})
+
+
+// Helper to get other participant's avatar
+const getOtherParticipantAvatar = computed(() => (conversation) => {
+  if (!conversation?.participants || !props.currentUserId) {
+    return null
+  }
+  
+  const otherParticipant = conversation.participants.find(
+    participant => participant.uuid !== props.currentUserId
+  )
+  
+  return otherParticipant?.avatar_url
+})
 </script>
 
 <template>
@@ -83,52 +113,50 @@ const formatTime = (timestamp) => {
         <h1 class="text-lg font-semibold">Tenant Chat</h1>
       </div>
 
-      <div class="p-4 flex-1">
-        <h2 class="mb-4 text-gray-600">Messages</h2>
-        <div class="h-full overflow-y-auto">
-          <div class="space-y-1">
-            <div
-              v-for="conversation in conversations"
-              :key="conversation.id"
-              :class="[
-                'flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-100 active:bg-gray-200',
-                selectedConversation === conversation.id ? 'bg-gray-100' : ''
-              ]"
-              @click="handleConversationClick(conversation.id)"
-            >
-              <div class="relative">
-                <div class="avatar w-12 h-12 rounded-full overflow-hidden">
-                  <!-- Conversation avatar - you'll need to implement based on your backend data -->
-                  <div class="w-full h-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold">
-                    {{ conversation.name?.[0] || 'C' }}
-                  </div>
-                </div>
-                <!-- Online indicator for 1:1 chats (you'll need to implement participant presence) -->
-                <!-- <div 
-                  v-if="isUserOnline(conversation.participantId)" 
-                  class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"
-                ></div> -->
-              </div>
-              
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between">
-                  <h3 class="font-medium truncate">{{ conversation.name }}</h3>
-                  <span class="text-xs text-gray-500">{{ formatTime(conversation.lastMessageAt) }}</span>
-                </div>
-                <p class="text-sm text-gray-600 truncate">{{ conversation.lastMessage || 'No messages yet' }}</p>
-              </div>
-              
-              <!-- Unread count - you'll need to track this from backend -->
-              <div 
-                v-if="conversation.unreadCount > 0" 
-                class="badge bg-green-500 text-white rounded-full w-5 h-5 p-0 text-xs flex items-center justify-center"
-              >
-                {{ conversation.unreadCount }}
-              </div>
-            </div>
+      <div class="space-y-1 p-2">
+    <div
+      v-for="conversation in conversations"
+      :key="conversation.id"
+      :class="[
+        'grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-gray-100 active:bg-gray-200 w-full',
+        selectedConversation === conversation.id ? 'bg-gray-100' : ''
+      ]"
+      @click="handleConversationClick(conversation.id)"
+    >
+      <!-- Avatar -->
+      <div class="relative">
+        <div class="avatar w-12 h-12 rounded-full overflow-hidden">
+          <div class="w-full h-full bg-blue-100 flex items-center justify-center text-blue-600 font-semibold">
+            {{ conversation.name?.[0] || 'C' }}
           </div>
         </div>
       </div>
+      
+      <!-- Text content -->
+      <div class="min-w-0">
+        <div class="flex items-center justify-between mb-1">
+          <h3 class="font-medium truncate">{{ getOtherParticipantName(conversation) }}</h3>
+          <span class="text-xs text-gray-500 shrink-0 ml-2">{{ formatTime(conversation.lastMessageAt) }}</span>
+        </div>
+        <p class="truncate text-sm text-gray-600">{{ conversation.lastMessage || 'No messages yet' }}</p>
+      </div>
+      
+      <!-- Unread badge -->
+      <div 
+        v-if="conversation.unreadCount > 0" 
+        class="badge bg-green-500 text-white rounded-full w-5 h-5 p-0 text-xs flex items-center justify-center"
+      >
+        {{ conversation.unreadCount }}
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+
+      
     </div>
   </div>
 </template>
@@ -143,6 +171,14 @@ const formatTime = (timestamp) => {
   align-items: center;
   justify-content: center;
   transition: background-color 0.2s;
+}
+
+.displaytext {
+    overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  min-width: 0;
+  width: 100%;
 }
 
 .btn-icon:hover {

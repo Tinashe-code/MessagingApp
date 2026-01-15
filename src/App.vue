@@ -9,6 +9,7 @@ import Chat from './components/Chat.vue';
 
 <template>
   <div>
+    
     <Chat />
   </div>
   <!-- <div class="h-screen flex bg-background">
