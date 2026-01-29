@@ -356,27 +356,47 @@ const getMessagePreview = (message) => {
 
 
 // REMEMBER TO UNCOMMENT THE CODE
+// async function openConversation(conversationId) {
+//   chatStore.activeConversationId = conversationId
+
+//   SocketService.emit('conversation.join', { conversationId })
+
+//   console.log('📜 Loading last 5 days of messages...')
+//   fetch(`/api/conversations/${conversationId}/messages`)
+//     .then(res => res.json())
+//     .then(({ messages }) => {
+//       chatStore.addMessages(conversationId, messages)
+
+//       // Update sidebar preview using last message
+//       const last = messages[messages.length - 1]
+//       // if (last) {
+//       //   chatStore.updateConversationLastMessage(conversationId, last)
+//       // }
+//     })
+//     .catch(err => {
+//       console.error('❌ Failed to load messages', err)
+//     })
+// }
+
+import { fetchConversationMessages } from '../services/chat.api'
+
 async function openConversation(conversationId) {
   chatStore.activeConversationId = conversationId
 
   SocketService.emit('conversation.join', { conversationId })
 
-  console.log('📜 Loading last 5 days of messages...')
-  fetch(`/api/conversations/${conversationId}/messages`)
-    .then(res => res.json())
-    .then(({ messages }) => {
-      chatStore.addMessages(conversationId, messages)
+  try {
+    console.log('📜 Loading last 5 days of messages...')
 
-      // Update sidebar preview using last message
-      const last = messages[messages.length - 1]
-      // if (last) {
-      //   chatStore.updateConversationLastMessage(conversationId, last)
-      // }
-    })
-    .catch(err => {
-      console.error('❌ Failed to load messages', err)
-    })
+    const messages = await fetchConversationMessages(conversationId)
+
+    chatStore.addMessages(conversationId, messages)
+
+  } catch (err) {
+    console.error('❌ Failed to load messages', err)
+  }
 }
+
 
 
 
